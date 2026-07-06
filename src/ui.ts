@@ -25,7 +25,7 @@ function siteHeader(): string {
   return `<div class="accent-bar" aria-hidden="true"></div>
   <header class="site-header">
     <div class="app-shell">
-      <a class="brand" href="https://mutual.solutions/" rel="noreferrer">
+      <a class="brand" href="/">
         <img src="https://mutual.solutions/img/logo.png" alt="mutual">
         <span class="brand-wordmark">
           <strong>mutual</strong>
