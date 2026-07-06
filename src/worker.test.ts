@@ -1148,3 +1148,59 @@ describe("Worker v2 API", () => {
     expect(called.result.content[0].json.crawl_run_id).toBe(1);
   });
 });
+
+describe("trust page", () => {
+  it("serves /trust and /api/trust-changes from stubbed upstream sources", async () => {
+    const stub = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("C2PA-TRUST-LIST.pem")) return new Response("BEGIN CERTIFICATE\nBEGIN CERTIFICATE\n");
+      if (url.includes("C2PA-TSA-TRUST-LIST.pem")) return new Response("BEGIN CERTIFICATE\n");
+      if (url.includes("conforming-products-list.json")) {
+        return new Response(JSON.stringify([
+          { applicant: "Google LLC", status: "conformant", product: { productType: "generatorProduct", DN: { CN: "Pixel Camera" }, assurance: { maxAssuranceLevel: 2 } }, specVersion: ["2.2"], dates: { conformance: "2025-06-27" } },
+        ]));
+      }
+      if (url.includes(".atom")) {
+        return new Response('<feed><entry><title>Automated Sync: Update trust list</title><updated>2026-06-25T18:16:55Z</updated><link href="https://github.com/x"/></entry></feed>');
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", stub);
+    try {
+      const db = new FakeD1();
+      db.assets = [
+        {
+          id: 1,
+          url: "https://example.com/a.jpg",
+          normalized_url: "https://example.com/a.jpg",
+          domain: "example.com",
+          source_type: "manual_seed",
+          source_url: "https://example.com/a.jpg",
+          classification: "trusted_camera_capture",
+          public_category: "real",
+          validation_status: "valid",
+          signer: "Pixel Camera",
+          claim_generator: "Pixel Camera",
+          content_type: "image/jpeg",
+          latest_validated_at: "2026-06-27T00:01:00.000Z",
+          created_at: "2026-06-27T00:00:00.000Z",
+        },
+      ];
+
+      const page = await worker.fetch(new Request("https://c2pa.mutual.solutions/trust"), env(db), testCtx);
+      const body = await page.text();
+      expect(page.status).toBe(200);
+      expect(body).toContain("Pixel Camera");
+      expect(body).toContain("trusted ×1");
+      expect(body).toContain("Automated Sync: Update trust list");
+
+      const feed = await worker.fetch(new Request("https://c2pa.mutual.solutions/api/trust-changes"), env(db), testCtx);
+      const data = (await feed.json()) as { trust_cert_count: number; tsa_cert_count: number; changes: unknown[] };
+      expect(data.trust_cert_count).toBe(2);
+      expect(data.tsa_cert_count).toBe(1);
+      expect(data.changes.length).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

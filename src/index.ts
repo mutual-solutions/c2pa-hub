@@ -11,7 +11,8 @@ import { evaluateRobotsTxt, robotsUrlFor } from "./robots";
 import { validatePublicHttpUrl } from "./safety";
 import { normalizeValidation } from "./taxonomy";
 import type { NormalizedValidation } from "./taxonomy";
-import { renderAssetsLibrary, renderHome, renderLandscape, renderMethodology, renderResources } from "./ui";
+import { renderAssetsLibrary, renderHome, renderLandscape, renderMethodology, renderResources, renderTrust } from "./ui";
+import type { TrustData, TrustProduct } from "./ui";
 
 type RuntimeEnv = Env & {
   VALIDATOR_CALLBACK_SECRET?: string;
@@ -73,6 +74,8 @@ export default {
       if (request.method === "GET" && url.pathname === "/landscape") return landscapePage(env);
       if (request.method === "GET" && url.pathname === "/assets") return assetsLibraryPage(url, env);
       if (request.method === "GET" && url.pathname === "/resources") return html(renderResources());
+      if (request.method === "GET" && url.pathname === "/trust") return html(renderTrust(await loadTrustData(env)));
+      if (request.method === "GET" && url.pathname === "/api/trust-changes") return trustChangesFeed(env);
       if (request.method === "GET" && url.pathname === "/api/methodology") return json(methodology(env));
       if (request.method === "GET" && url.pathname === "/api/assets") return listAssets(url, env);
       if (request.method === "GET" && url.pathname.startsWith("/api/assets/")) return getAsset(url, env);
@@ -172,6 +175,126 @@ async function getAsset(url: URL, env: RuntimeEnv): Promise<Response> {
   return json({
     methodology_version: env.METHODOLOGY_VERSION,
     asset: { ...(row as Record<string, unknown>), actions, ingredients_count: attempt?.ingredients_count ?? 0 },
+  });
+}
+
+const CONFORMANCE_REPO = "c2pa-org/conformance-public";
+const TRUST_LIST_URL = `https://raw.githubusercontent.com/${CONFORMANCE_REPO}/main/trust-list/C2PA-TRUST-LIST.pem`;
+const TSA_LIST_URL = `https://raw.githubusercontent.com/${CONFORMANCE_REPO}/main/trust-list/C2PA-TSA-TRUST-LIST.pem`;
+const PRODUCTS_URL = `https://raw.githubusercontent.com/${CONFORMANCE_REPO}/main/conforming-products/conforming-products-list.json`;
+const TRUST_COMMITS_URL = `https://github.com/${CONFORMANCE_REPO}/commits/main/trust-list.atom`;
+
+async function cachedUpstreamText(url: string, ttlSeconds: number): Promise<string | null> {
+  const cache = typeof caches !== "undefined" ? caches.default : null;
+  const cacheKey = new Request(url, { headers: { accept: "text/plain" } });
+  if (cache) {
+    const hit = await cache.match(cacheKey);
+    if (hit) return hit.text();
+  }
+  try {
+    const response = await fetch(url, {
+      headers: { "user-agent": USER_AGENT, accept: "application/vnd.github+json, application/json;q=0.9, */*;q=0.8" },
+    });
+    if (!response.ok) return null;
+    const body = await response.text();
+    if (cache) {
+      await cache.put(cacheKey, new Response(body, { headers: { "cache-control": `public, max-age=${ttlSeconds}` } }));
+    }
+    return body;
+  } catch {
+    return null;
+  }
+}
+
+function countCertificates(pem: string | null): number | null {
+  if (!pem) return null;
+  return (pem.match(/BEGIN CERTIFICATE/g) ?? []).length;
+}
+
+async function loadTrustData(env: RuntimeEnv): Promise<TrustData> {
+  const [trustPem, tsaPem, productsRaw, commitsRaw, signerRows] = await Promise.all([
+    cachedUpstreamText(TRUST_LIST_URL, 3600),
+    cachedUpstreamText(TSA_LIST_URL, 3600),
+    cachedUpstreamText(PRODUCTS_URL, 3600),
+    cachedUpstreamText(TRUST_COMMITS_URL, 3600),
+    env.DB.prepare("select signer, classification, count(*) as n from media_assets where signer is not null group by signer, classification").all(),
+  ]);
+
+  const observed = new Map<string, { trusted: number; untrusted: number; invalid: number }>();
+  for (const row of (signerRows.results ?? []) as Array<Record<string, unknown>>) {
+    const name = String(row.signer).toLowerCase();
+    const bucket = observed.get(name) ?? { trusted: 0, untrusted: 0, invalid: 0 };
+    const classification = String(row.classification);
+    const n = Number(row.n) || 0;
+    if (classification === "trusted_camera_capture" || classification === "trusted_edited" || classification === "ai_disclosed") bucket.trusted += n;
+    else if (classification === "c2pa_invalid") bucket.invalid += n;
+    else bucket.untrusted += n;
+    observed.set(name, bucket);
+  }
+
+  let products: TrustProduct[] = [];
+  try {
+    const parsed = JSON.parse(productsRaw ?? "[]");
+    if (Array.isArray(parsed)) {
+      products = parsed
+        .map((record: Record<string, any>): TrustProduct => {
+          const cn = String(record?.product?.DN?.CN ?? "");
+          const totals = { trusted: 0, untrusted: 0, invalid: 0 };
+          if (cn) {
+            const needle = cn.toLowerCase();
+            for (const [signer, bucket] of observed) {
+              if (signer === needle || signer.includes(needle) || needle.includes(signer)) {
+                totals.trusted += bucket.trusted;
+                totals.untrusted += bucket.untrusted;
+                totals.invalid += bucket.invalid;
+              }
+            }
+          }
+          return {
+            cn: cn || "(unnamed)",
+            applicant: String(record?.applicant ?? ""),
+            productType: String(record?.product?.productType ?? ""),
+            assurance: record?.product?.assurance?.maxAssuranceLevel ?? null,
+            spec: Array.isArray(record?.specVersion) ? record.specVersion.join(", ") : String(record?.specVersion ?? ""),
+            since: String(record?.dates?.conformance ?? ""),
+            status: String(record?.status ?? ""),
+            observedTrusted: totals.trusted,
+            observedUntrusted: totals.untrusted,
+            observedInvalid: totals.invalid,
+          };
+        })
+        .sort((a, b) => (b.since || "").localeCompare(a.since || ""));
+    }
+  } catch {
+    products = [];
+  }
+
+  const changes: TrustData["changes"] = [];
+  for (const entry of (commitsRaw ?? "").split("<entry>").slice(1)) {
+    const title = entry.match(/<title>([^<]*)<\/title>/)?.[1] ?? "";
+    const updated = entry.match(/<updated>([^<]*)<\/updated>/)?.[1] ?? "";
+    const link = entry.match(/href="([^"]*)"/)?.[1] ?? "";
+    if (updated) changes.push({ date: updated, message: title.trim(), url: link });
+  }
+
+  return {
+    sourceOk: Boolean(productsRaw && commitsRaw),
+    trustCertCount: countCertificates(trustPem),
+    tsaCertCount: countCertificates(tsaPem),
+    changes,
+    products,
+  };
+}
+
+async function trustChangesFeed(env: RuntimeEnv): Promise<Response> {
+  const data = await loadTrustData(env);
+  return json({
+    source: `https://github.com/${CONFORMANCE_REPO}`,
+    source_ok: data.sourceOk,
+    trust_cert_count: data.trustCertCount,
+    tsa_cert_count: data.tsaCertCount,
+    conforming_product_count: data.products.length,
+    changes: data.changes,
   });
 }
 

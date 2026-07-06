@@ -167,7 +167,3 @@ gh workflow run "C2PA Validator" --repo mutantQ/mutual-c2pa-hub --ref master
 ```
 
 The scheduled Worker queues broad discovery every six hours (cron `17 */6 * * *`). The validator workflow runs every 15 minutes.
-
-## License
-
-MIT. See [LICENSE](LICENSE). Contributions welcome.

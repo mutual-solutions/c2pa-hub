@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renderAssetsLibrary, renderHome, renderLandscape, renderMethodology, renderResources } from "./ui";
+import { renderAssetsLibrary, renderHome, renderLandscape, renderMethodology, renderResources, renderTrust } from "./ui";
 
 const LANDSCAPE_FIXTURE = {
   total: 437,
@@ -212,5 +212,39 @@ describe("renderLandscape", () => {
 
     expect(html).not.toContain("NaN");
     expect(html).toContain(">0<sup>%</sup>");
+  });
+});
+
+describe("renderTrust", () => {
+  const fixture = {
+    sourceOk: true,
+    trustCertCount: 41,
+    tsaCertCount: 12,
+    changes: [
+      { date: "2026-06-25T18:16:55Z", message: "Automated Sync: Update TSA trust list (C2PA-TSA-TRUST-LIST.pem)", url: "https://github.com/x" },
+    ],
+    products: [
+      { cn: "Pixel Camera", applicant: "Google LLC", productType: "generatorProduct", assurance: 2, spec: "2.2", since: "2025-06-27", status: "conformant", observedTrusted: 5, observedUntrusted: 1, observedInvalid: 0 },
+      { cn: "Ghost Cam", applicant: "Nobody Inc", productType: "generatorProduct", assurance: 1, spec: "2.3", since: "2026-01-01", status: "conformant", observedTrusted: 0, observedUntrusted: 0, observedInvalid: 0 },
+    ],
+  };
+
+  it("renders change history, product table, and observation badges", () => {
+    const html = renderTrust(fixture);
+
+    expect(html).toContain("Who the ecosystem trusts, tracked.");
+    expect(html).toContain("Automated Sync: Update TSA trust list");
+    expect(html).toContain("Pixel Camera");
+    expect(html).toContain("trusted ×5");
+    expect(html).toContain("not seen");
+    expect(html).toContain("/api/trust-changes");
+    expect(html).toContain(">41<");
+  });
+
+  it("degrades gracefully when upstream sources are unreachable", () => {
+    const html = renderTrust({ sourceOk: false, trustCertCount: null, tsaCertCount: null, changes: [], products: [] });
+
+    expect(html).toContain("unreachable right now");
+    expect(html).not.toContain("<table class=\"trust-table\"");
   });
 });

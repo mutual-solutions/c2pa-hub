@@ -35,6 +35,7 @@ function siteHeader(): string {
       <nav class="top-nav" aria-label="Site">
         <a href="/assets">Assets</a>
         <a href="/landscape">Landscape</a>
+        <a href="/trust">Trust</a>
         <a href="/resources">Resources</a>
         <a href="/methodology">Methodology</a>
       </nav>
@@ -52,6 +53,7 @@ function siteFooter(): string {
       <nav class="footer-links" aria-label="Footer">
         <a href="/assets">Test assets</a>
         <a href="/landscape">Ecosystem landscape</a>
+        <a href="/trust">Trust list &amp; conformance</a>
         <a href="/resources">Resources</a>
         <a href="/methodology">Methodology</a>
         <a href="/api/export.json">export.json</a>
@@ -422,6 +424,39 @@ const SHARED_STYLES = `
       color: var(--m-slate-600);
       font-family: var(--font-mono);
       font-size: 11px;
+    }
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 16px;
+    }
+    .stat-tile {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      padding: 16px 18px;
+    }
+    .stat-tile .stat-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--m-slate-600);
+    }
+    .stat-tile .stat-value {
+      margin-top: 8px;
+      font-size: 30px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      color: var(--m-slate-900);
+      line-height: 1.1;
+    }
+    .stat-tile .stat-sub {
+      margin-top: 4px;
+      font-size: 12.5px;
+      color: var(--m-slate-500);
+      line-height: 1.45;
     }
     .results-area {
       padding: 40px 0 48px;
@@ -1752,39 +1787,6 @@ const LANDSCAPE_STYLES = `
     }
     .hero-strip .seg:first-child { border-radius: 4px 0 0 4px; }
     .hero-strip .seg:last-child { border-radius: 0 4px 4px 0; }
-    .kpi-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-      gap: 16px;
-    }
-    .stat-tile {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: var(--surface);
-      padding: 16px 18px;
-    }
-    .stat-tile .stat-label {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--m-slate-600);
-    }
-    .stat-tile .stat-value {
-      margin-top: 8px;
-      font-size: 30px;
-      font-weight: 650;
-      letter-spacing: -0.02em;
-      color: var(--m-slate-900);
-      line-height: 1.1;
-    }
-    .stat-tile .stat-sub {
-      margin-top: 4px;
-      font-size: 12.5px;
-      color: var(--m-slate-500);
-      line-height: 1.45;
-    }
     .chart-note {
       margin: 10px 0 0;
       max-width: 760px;
@@ -2526,6 +2528,212 @@ export function renderResources(): string {
 
     <section class="app-shell prose-area">
       ${sections}
+      <a class="back-link" href="/">Back to search</a>
+    </section>
+  </main>
+
+  ${siteFooter()}
+</body>
+</html>`;
+}
+
+export interface TrustProduct {
+  cn: string;
+  applicant: string;
+  productType: string;
+  assurance: number | null;
+  spec: string;
+  since: string;
+  status: string;
+  observedTrusted: number;
+  observedUntrusted: number;
+  observedInvalid: number;
+}
+
+export interface TrustData {
+  sourceOk: boolean;
+  trustCertCount: number | null;
+  tsaCertCount: number | null;
+  changes: Array<{ date: string; message: string; url: string }>;
+  products: TrustProduct[];
+}
+
+const TRUST_STYLES = `
+    .trust-table-wrap {
+      margin-top: 20px;
+      overflow-x: auto;
+    }
+    .trust-table {
+      border-collapse: collapse;
+      font-size: 13px;
+      width: 100%;
+      min-width: 760px;
+    }
+    .trust-table th {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--m-slate-500);
+      text-align: left;
+      padding: 8px 16px 8px 0;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .trust-table td {
+      padding: 8px 16px 8px 0;
+      border-bottom: 1px solid var(--m-slate-100);
+      color: var(--m-slate-700);
+      vertical-align: top;
+    }
+    .trust-table td.num {
+      font-variant-numeric: tabular-nums;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .trust-table .product-name {
+      color: var(--m-slate-900);
+      font-weight: 650;
+    }
+    .obs-badge {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 100px;
+      padding: 2px 9px;
+      white-space: nowrap;
+    }
+    .obs-trusted { color: #065f46; background: #ecfdf5; }
+    .obs-untrusted { color: #1d566b; background: var(--m-blue-light); }
+    .obs-none { color: var(--m-slate-500); }
+    .change-list {
+      list-style: none;
+      margin: 18px 0 0;
+      padding: 0;
+      display: grid;
+      gap: 10px;
+      max-width: 780px;
+    }
+    .change-list li {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 14px;
+      font-size: 13.5px;
+      color: var(--m-slate-700);
+      border-bottom: 1px solid var(--m-slate-100);
+      padding-bottom: 10px;
+    }
+    .change-list .change-date {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--m-blue-dark);
+      white-space: nowrap;
+    }
+    .trust-unavailable {
+      border: 1px dashed var(--m-slate-300);
+      border-radius: 6px;
+      padding: 32px 24px;
+      text-align: center;
+      color: var(--m-slate-600);
+      font-size: 14px;
+    }`;
+
+export function renderTrust(data: TrustData): string {
+  const lastChange = data.changes[0]?.date ? data.changes[0].date.slice(0, 10) : "unknown";
+
+  const changeItems = data.changes
+    .slice(0, 12)
+    .map((change) => `<li><span class="change-date">${esc(change.date.slice(0, 10))}</span><span>${esc(change.message.split("\n")[0])}</span></li>`)
+    .join("\n        ");
+
+  const productRows = data.products
+    .map((product) => {
+      const observed = product.observedTrusted
+        ? `<span class="obs-badge obs-trusted">trusted ×${product.observedTrusted}</span>`
+        : product.observedUntrusted || product.observedInvalid
+          ? `<span class="obs-badge obs-untrusted">untrusted ×${product.observedUntrusted + product.observedInvalid}</span>`
+          : `<span class="obs-badge obs-none">not seen</span>`;
+      return `<tr><td class="product-name">${esc(product.cn)}</td><td>${esc(product.applicant)}</td><td>${esc(product.productType.replace("Product", ""))}</td><td class="num">${product.assurance ?? ""}</td><td class="num">${esc(product.spec)}</td><td class="num">${esc(product.since)}</td><td>${observed}</td></tr>`;
+    })
+    .join("\n          ");
+
+  const body = data.sourceOk
+    ? `<h2>Recent trust-list changes</h2>
+      <p class="chart-note">Every change to the official C2PA trust list and TSA trust list, from the <a href="https://github.com/c2pa-org/conformance-public/commits/main/trust-list" rel="noreferrer" target="_blank">c2pa-org/conformance-public</a> history. Certificate additions and revocations show up here. Machine-readable feed: <a href="/api/trust-changes">/api/trust-changes</a>.</p>
+      <ul class="change-list">
+        ${changeItems}
+      </ul>
+
+      <h2>Conforming products, observed in the wild</h2>
+      <p class="chart-note">The official conforming-products list, cross-referenced against what our crawler finds and validates. "Trusted" means we hold at least one image from that signer that validates against the trust list. "Not seen" means our corpus has no sample yet, which says more about our coverage than about the product.</p>
+      <div class="trust-table-wrap">
+        <table class="trust-table">
+          <thead><tr><th scope="col">Product</th><th scope="col">Applicant</th><th scope="col">Type</th><th scope="col">AL</th><th scope="col">Spec</th><th scope="col">Conformant since</th><th scope="col">In our corpus</th></tr></thead>
+          <tbody>
+          ${productRows}
+          </tbody>
+        </table>
+      </div>`
+    : `<div class="trust-unavailable">Upstream sources (github.com/c2pa-org/conformance-public) are unreachable right now. Try again in a few minutes.</div>`;
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  ${pageHead("Trust list & conformance · mutual C2PA Search", "The official C2PA trust list and conforming-products list, tracked for changes and cross-referenced against validated images from the public web.", "/trust")}
+  <style>${SHARED_STYLES}
+${TRUST_STYLES}
+    .chart-note {
+      margin: 10px 0 0;
+      max-width: 760px;
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--m-slate-600);
+    }
+  </style>
+</head>
+<body>
+  ${siteHeader()}
+
+  <main>
+    <section class="hero-band">
+      <div class="app-shell hero-inner hero-inner-compact">
+        <div class="hero-copy">
+          <div class="section-label-mono">Trust &amp; conformance</div>
+          <h1>Who the ecosystem trusts, tracked.</h1>
+          <p>The C2PA trust list decides which signatures verifiers believe. We track every change to it, and check the official conforming-products list against what our crawler actually observes.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="app-shell prose-area">
+      <div class="kpi-row">
+        <div class="stat-tile">
+          <div class="stat-label">Trust anchors</div>
+          <div class="stat-value">${data.trustCertCount ?? "?"}</div>
+          <div class="stat-sub">certificates in C2PA-TRUST-LIST.pem</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">TSA anchors</div>
+          <div class="stat-value">${data.tsaCertCount ?? "?"}</div>
+          <div class="stat-sub">timestamp-authority certificates</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">Conforming products</div>
+          <div class="stat-value">${data.products.length || "?"}</div>
+          <div class="stat-sub">on the official list</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-label">Last trust-list change</div>
+          <div class="stat-value" style="font-size:22px">${esc(lastChange)}</div>
+          <div class="stat-sub">refreshed hourly from source</div>
+        </div>
+      </div>
+
+      ${body}
+
+      <p class="api-note">Sources: <a href="https://raw.githubusercontent.com/c2pa-org/conformance-public/main/trust-list/C2PA-TRUST-LIST.pem" rel="noreferrer" target="_blank">trust list</a> &middot; <a href="https://raw.githubusercontent.com/c2pa-org/conformance-public/main/conforming-products/conforming-products-list.json" rel="noreferrer" target="_blank">conforming products</a> &middot; corpus observations from <a href="/landscape">our landscape data</a>. Conformance does not by itself mean a product's output validates as trusted; certificates deploy on their own schedule.</p>
       <a class="back-link" href="/">Back to search</a>
     </section>
   </main>
