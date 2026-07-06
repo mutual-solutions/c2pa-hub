@@ -1,0 +1,36 @@
+name: C2PA Validator
+
+"on":
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HUB_BASE_URL: https://mutual-c2pa-scanner.mutualsolutions.workers.dev
+      VALIDATOR_KEY_ID: validator-prod-2026-06
+      C2PATOOL_VERSION: "0.26.68"
+      VALIDATION_JOB_LIMIT: "50"
+      VALIDATOR_PULL_SECRET: ${{ secrets.VALIDATOR_PULL_SECRET }}
+      VALIDATOR_CALLBACK_SECRET: ${{ secrets.VALIDATOR_CALLBACK_SECRET }}
+      C2PATOOL_TRUST_ANCHORS: https://raw.githubusercontent.com/c2pa-org/conformance-public/refs/heads/main/trust-list/C2PA-TRUST-LIST.pem
+      C2PATOOL_TSA_TRUST_ANCHORS: https://raw.githubusercontent.com/c2pa-org/conformance-public/refs/heads/main/trust-list/C2PA-TSA-TRUST-LIST.pem
+      SOFT_BINDING_RESOLVERS: ${{ secrets.SOFT_BINDING_RESOLVERS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install c2patool
+        run: |
+          if ! command -v c2patool >/dev/null; then
+            curl -L -o /tmp/c2patool.tar.gz "https://github.com/contentauth/c2pa-rs/releases/download/c2patool-v${C2PATOOL_VERSION}/c2patool-v${C2PATOOL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+            mkdir -p /tmp/c2patool
+            tar -xzf /tmp/c2patool.tar.gz -C /tmp/c2patool
+            sudo install -m 0755 "$(find /tmp/c2patool -type f -name c2patool | head -1)" /usr/local/bin/c2patool
+          fi
+          c2patool --version
+
+      - name: Validate queued jobs
+        run: node scripts/validate-jobs.mjs

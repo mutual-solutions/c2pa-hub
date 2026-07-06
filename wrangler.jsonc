@@ -1,0 +1,84 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "mutual-c2pa-scanner",
+	"main": "src/index.ts",
+	"workers_dev": true,
+	"preview_urls": false,
+	"compatibility_date": "2026-06-27",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"assets": {
+		"directory": "./public"
+	},
+	"routes": [
+		{
+			"pattern": "c2pa.mutual.solutions",
+			"custom_domain": true
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "c2pa-scanner-db",
+			"database_id": "6b6a32ce-4854-49ae-8c5b-ceda812bcc40"
+		}
+	],
+	"observability": {
+		"enabled": true
+	},
+	"r2_buckets": [
+		{
+			"bucket_name": "mutual-c2pa-search-assets",
+			"binding": "ASSETS",
+			"remote": true
+		}
+	],
+	"queues": {
+		"producers": [
+			{
+				"binding": "DISCOVERY_QUEUE",
+				"queue": "c2pa-discovery"
+			},
+			{
+				"binding": "FETCH_QUEUE",
+				"queue": "c2pa-fetch"
+			},
+			{
+				"binding": "VALIDATE_QUEUE",
+				"queue": "c2pa-validate"
+			}
+		],
+		"consumers": [
+			{
+				"queue": "c2pa-discovery",
+				"max_batch_size": 5,
+				"max_batch_timeout": 10,
+				"max_retries": 3
+			},
+			{
+				"queue": "c2pa-fetch",
+				"max_batch_size": 5,
+				"max_batch_timeout": 10,
+				"max_retries": 3
+			},
+			{
+				"queue": "c2pa-validate",
+				"max_batch_size": 10,
+				"max_batch_timeout": 10,
+				"max_retries": 3
+			}
+		]
+	},
+	"triggers": {
+		"crons": [
+			"17 */6 * * *"
+		]
+	},
+	"vars": {
+		"METHODOLOGY_VERSION": "c2pa-hub-v2-2026-06-27",
+		"VALIDATOR_KEY_ID": "validator-prod-2026-06",
+		"PUBLIC_BASE_URL": "https://c2pa.mutual.solutions",
+		"VALIDATOR_SERVICE_URL": ""
+	}
+}

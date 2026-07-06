@@ -1,0 +1,24 @@
+{
+  "name": "c2pa-scanner",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "verify:ui": "node --experimental-strip-types scripts/verify-ui.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "axe-core": "^4.12.1",
+    "playwright": "^1.61.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16",
+    "wrangler": "^4.105.0"
+  }
+}
