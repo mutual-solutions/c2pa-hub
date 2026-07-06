@@ -1388,13 +1388,8 @@ export function renderHome(): string {
       document.querySelector(".results-head").scrollIntoView({ behavior: smooth });
     }
 
-    function openDetail(asset, trigger) {
-      if (!asset) return;
-      detailTrigger = trigger;
+    function detailFacts(asset) {
       const category = normalizeCategory(asset.public_category);
-      document.querySelector("#detail-thumb").innerHTML = renderAssetImage(asset, 0);
-      document.querySelector("#detail-thumb").classList.remove("is-empty");
-      document.querySelector("#detail-title").textContent = displayUrl(asset.url);
       const facts = [
         row("Category", displayCategory(category)),
         row("Classification", humanize(asset.classification || "validated")),
@@ -1405,14 +1400,40 @@ export function renderHome(): string {
         row("Content type", asset.content_type || "unknown"),
         row("Validated", formatDate(asset.latest_validated_at || "pending")),
       ];
+      if (Array.isArray(asset.actions) && asset.actions.length) {
+        facts.push(row("Declared edits", asset.actions.map((action) => humanize(String(action).replace(/^c2pa\\./, ""))).join(", ")));
+      }
+      if (asset.ingredients_count) facts.push(row("Ingredients", String(asset.ingredients_count)));
       if (asset.platform_claim_app) facts.push(row("Platform app", asset.platform_claim_app));
       if (asset.platform_claim_issued_by) facts.push(row("Claim issued by", asset.platform_claim_issued_by));
       if (asset.platform_claim_issued_at) facts.push(row("Claim issued at", formatDate(asset.platform_claim_issued_at)));
       if (asset.platform_claim_ai_disclosure) facts.push(row("AI disclosure", humanize(asset.platform_claim_ai_disclosure)));
-      document.querySelector("#detail-facts").innerHTML = facts.join("");
+      return facts.join("");
+    }
+
+    let currentDetailId = null;
+
+    function openDetail(asset, trigger) {
+      if (!asset) return;
+      detailTrigger = trigger;
+      currentDetailId = String(asset.id);
+      document.querySelector("#detail-thumb").innerHTML = renderAssetImage(asset, 0);
+      document.querySelector("#detail-thumb").classList.remove("is-empty");
+      document.querySelector("#detail-title").textContent = displayUrl(asset.url);
+      document.querySelector("#detail-facts").innerHTML = detailFacts(asset);
       document.querySelector("#detail-open").href = asset.url;
       detail.showModal();
       setAssetParam(asset.id);
+      if (asset.actions === undefined) {
+        fetch("/api/assets/" + encodeURIComponent(String(asset.id)))
+          .then((response) => (response.ok ? response.json() : null))
+          .then((data) => {
+            if (data && data.asset && detail.open && currentDetailId === String(asset.id)) {
+              document.querySelector("#detail-facts").innerHTML = detailFacts(data.asset);
+            }
+          })
+          .catch(() => {});
+      }
     }
 
     results.addEventListener("click", (event) => {

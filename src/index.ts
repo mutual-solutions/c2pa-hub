@@ -155,7 +155,24 @@ async function getAsset(url: URL, env: RuntimeEnv): Promise<Response> {
 
   if (!row) return json({ error: "not_found" }, 404);
 
-  return json({ methodology_version: env.METHODOLOGY_VERSION, asset: row });
+  const attempt = await env.DB.prepare(
+    "select actions_json, ingredients_count from validation_attempts where media_asset_id = ? order by id desc limit 1",
+  )
+    .bind(id)
+    .first<{ actions_json: string | null; ingredients_count: number | null }>();
+
+  let actions: string[] = [];
+  try {
+    const parsed = JSON.parse(attempt?.actions_json ?? "[]");
+    if (Array.isArray(parsed)) actions = parsed.map(String);
+  } catch {
+    actions = [];
+  }
+
+  return json({
+    methodology_version: env.METHODOLOGY_VERSION,
+    asset: { ...(row as Record<string, unknown>), actions, ingredients_count: attempt?.ingredients_count ?? 0 },
+  });
 }
 
 async function assetsLibraryPage(url: URL, env: RuntimeEnv): Promise<Response> {

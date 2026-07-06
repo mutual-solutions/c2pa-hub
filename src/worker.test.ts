@@ -181,6 +181,10 @@ class FakeD1 {
   }
 
   first(sql: string, values: unknown[]): unknown | null {
+    if (sql.includes("select actions_json, ingredients_count from validation_attempts")) {
+      const attempt = this.validationJobs.find((job) => job.media_asset_id === values[0]);
+      return attempt ? { actions_json: attempt.actions_json ?? "[]", ingredients_count: attempt.ingredients_count ?? 0 } : null;
+    }
     if (sql.includes("count(distinct domain)")) {
       const dates = this.assets.map((asset) => asset.created_at).sort();
       return {
