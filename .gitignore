@@ -6,3 +6,8 @@ node_modules/
 dist/
 coverage/
 *.log
+
+# local tooling state
+.omc/
+progress.txt
+prd.json
