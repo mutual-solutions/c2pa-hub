@@ -25,6 +25,9 @@ The home page at https://c2pa.mutual.solutions is a client-side search hub rende
 - **Click-to-filter.** Signer and generator values on cards are clickable buttons that set the search field and re-run the query.
 - **Methodology page.** `GET /methodology` renders an HTML explanation of the classification rules, discovery sources, and limitations. A compact link to it appears in the site header and footer.
 - **Social card.** `GET /og.png` is a static asset served from the `./public` directory and used as the Open Graph image for the site.
+- **Test-asset library.** `GET /assets` lists validated samples with intact manifests, filterable by signer and category, with downloads of the exact cached bytes we validated.
+- **Ecosystem landscape.** `GET /landscape` renders live charts from corpus aggregates: the provenance funnel, the trust gap, and per-signer trust breakdowns.
+- **Resources.** `GET /resources` is a directory of community tools (viewers, specs, SDKs, signing certs, sample repos) plus this hub's data products.
 
 ## Public Taxonomy
 
@@ -116,14 +119,14 @@ All endpoints return JSON unless noted. Authenticated internal endpoints (valida
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `q` | string | — | Full-text search across signer, generator, domain, URL, and platform claim fields. |
-| `category` | `real` \| `edited` | — | Filter to a single public category. Omit to return both. |
-| `domain` | string | — | Exact domain match. |
-| `signer` | string | — | Substring match on the C2PA signer field. |
-| `generator` | string | — | Substring match on the claim generator field. |
-| `classification` | string | — | Exact match on the internal classification value. |
+| `q` | string | - | Full-text search across signer, generator, domain, URL, and platform claim fields. |
+| `category` | `real` \| `edited` | - | Filter to a single public category. Omit to return both. |
+| `domain` | string | - | Exact domain match. |
+| `signer` | string | - | Substring match on the C2PA signer field. |
+| `generator` | string | - | Substring match on the claim generator field. |
+| `classification` | string | - | Exact match on the internal classification value. |
 | `limit` | integer | 100 | Page size. Clamped to 1–1000. The UI uses 24. |
-| `cursor` | string | — | Opaque base64url cursor from `next_cursor` in a prior response, for keyset pagination. |
+| `cursor` | string | - | Opaque base64url cursor from `next_cursor` in a prior response, for keyset pagination. |
 | `include_excluded_ai` | boolean | false | Include `excluded_ai_generated` assets in results. |
 | `include_diagnostics` | boolean | false | Include `diagnostic` assets in results. |
 
@@ -164,7 +167,3 @@ gh workflow run "C2PA Validator" --repo mutantQ/mutual-c2pa-hub --ref master
 ```
 
 The scheduled Worker queues broad discovery every six hours (cron `17 */6 * * *`). The validator workflow runs every 15 minutes.
-
-## License
-
-MIT — see [LICENSE](LICENSE). Contributions welcome.

@@ -185,9 +185,15 @@ async function assetsLibraryPage(url: URL, env: RuntimeEnv): Promise<Response> {
     env.DB.prepare("select signer, classification, count(*) as n from media_assets where signer is not null group by signer, classification").all(),
   ]);
 
+  const allowedClasses =
+    category === "real"
+      ? new Set(["trusted_camera_capture"])
+      : category === "edited"
+        ? new Set(["trusted_edited"])
+        : TRUSTED_PUBLIC_CLASSES;
   const signerTotals = new Map<string, number>();
   for (const row of (signerRows.results ?? []) as Array<Record<string, unknown>>) {
-    if (!TRUSTED_PUBLIC_CLASSES.has(String(row.classification))) continue;
+    if (!allowedClasses.has(String(row.classification))) continue;
     const name = String(row.signer);
     signerTotals.set(name, (signerTotals.get(name) ?? 0) + (Number(row.n) || 0));
   }

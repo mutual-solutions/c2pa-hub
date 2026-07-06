@@ -57,6 +57,7 @@ function siteFooter(): string {
         <a href="/api/export.json">export.json</a>
         <a href="/api/export.csv">export.csv</a>
         <a href="/api/export.json?include_diagnostics=true">diagnostics export</a>
+        <a href="https://github.com/mutual-solutions/c2pa-hub" rel="noreferrer" target="_blank">Open source ↗</a>
         <span class="footer-note">MCP endpoint: POST /mcp</span>
       </nav>
     </div>
@@ -1559,7 +1560,7 @@ export function renderMethodology(version = ""): string {
   return `<!doctype html>
 <html lang="en">
 <head>
-  ${pageHead("Methodology — mutual C2PA Search", "How the mutual C2PA corpus is discovered, validated, and classified.", "/methodology")}
+  ${pageHead("Methodology · mutual C2PA Search", "How the mutual C2PA corpus is discovered, validated, and classified.", "/methodology")}
   <style>${SHARED_STYLES}
   </style>
 </head>
@@ -2065,7 +2066,7 @@ export function renderLandscape(data: LandscapeData): string {
   return `<!doctype html>
 <html lang="en">
 <head>
-  ${pageHead("C2PA ecosystem landscape — mutual C2PA Search", "How much of the public web's imagery carries trusted C2PA provenance, measured by continuous crawling and validation.", "/landscape")}
+  ${pageHead("C2PA ecosystem landscape · mutual C2PA Search", "How much of the public web's imagery carries trusted C2PA provenance, measured by continuous crawling and validation.", "/landscape")}
   <style>${SHARED_STYLES}
 ${LANDSCAPE_STYLES}
   </style>
@@ -2118,7 +2119,7 @@ ${LANDSCAPE_STYLES}
       </div>
 
       <h2>The provenance funnel</h2>
-      <p class="chart-note">Every stage loses most of what enters it. Candidates are discovered by targeted search, Common Crawl probes, sitemaps, feeds, and community seeds &mdash; sources already biased <em>toward</em> C2PA content. The open web at large would fare far worse.</p>
+      <p class="chart-note">Every stage loses most of what enters it. Candidates come from targeted search, Common Crawl probes, sitemaps, feeds, and community seeds. All of those are already biased <em>toward</em> C2PA content, so the open web at large fares worse than this.</p>
       <div class="chart-rows">
         ${funnelRows}
       </div>
@@ -2133,7 +2134,7 @@ ${LANDSCAPE_STYLES}
       </details>
 
       <h2>The trust gap</h2>
-      <p class="chart-note"><strong>${pct(failTrust, manifests)}% of the manifests we found do not validate against the C2PA trust list.</strong> Most carry self-signed or test certificates &mdash; tools that implemented the spec but never obtained (or deployed) a trusted signing credential. To a verifier, these images look no more credible than unsigned ones.</p>
+      <p class="chart-note"><strong>${pct(failTrust, manifests)}% of the manifests we found do not validate against the C2PA trust list.</strong> Most carry self-signed or test certificates: tools that implemented the spec but never got, or never deployed, a trusted signing credential. To a verifier these images are no more credible than unsigned ones.</p>
       <div class="stack stack-wide">
         ${trusted ? seg("Trusted & valid", trusted, manifests, C_TRUSTED) : ""}
         ${untrusted ? seg("Untrusted certificate", untrusted, manifests, C_UNTRUSTED) : ""}
@@ -2175,7 +2176,7 @@ ${LANDSCAPE_STYLES}
         </div>
         <div class="barrier">
           <h3>Conformant does not mean trusted</h3>
-          <p>Products can implement the spec &mdash; even pass conformance &mdash; while shipping self-signed or test certificates. Verifiers correctly refuse to trust them, so the effort produces no credibility. Free claim-signing certificates (announced June 2026) may finally close this gap.</p>
+          <p>A product can implement the spec, even pass conformance, and still ship self-signed or test certificates. Verifiers refuse to trust those, so all that work buys no credibility. Free claim-signing certificates (announced June 2026) may finally close this gap.</p>
           <span class="evidence">measured: ${untrusted} of ${manifests} manifests carry untrusted certificates</span>
         </div>
         <div class="barrier">
@@ -2190,7 +2191,7 @@ ${LANDSCAPE_STYLES}
         </div>
         <div class="barrier">
           <h3>Absence proves nothing</h3>
-          <p>C2PA can prove where a signed image came from &mdash; it can never prove an unsigned image is fake. Until signing is the default, the absence of provenance is simply the natural state of the web, and stripped images are indistinguishable from never-signed ones.</p>
+          <p>C2PA can prove where a signed image came from. It cannot prove an unsigned image is fake. Until signing is the default, missing provenance is just the normal state of the web, and a stripped image looks exactly like one that was never signed.</p>
           <span class="evidence">measured: ${pct(noManifest, total)}% of the crawl is in that indistinguishable state</span>
         </div>
       </div>
@@ -2359,7 +2360,7 @@ export function renderAssetsLibrary(assets: LibraryAsset[], signers: Array<{ sig
   return `<!doctype html>
 <html lang="en">
 <head>
-  ${pageHead("Test assets — mutual C2PA Search", "Validated C2PA sample images with intact manifests: filter by signer, download originals, deep-link full provenance records.", "/assets")}
+  ${pageHead("Test assets · mutual C2PA Search", "Validated C2PA sample images with intact manifests: filter by signer, download originals, deep-link full provenance records.", "/assets")}
   <style>${SHARED_STYLES}
 ${LIBRARY_STYLES}
   </style>
@@ -2373,7 +2374,7 @@ ${LIBRARY_STYLES}
         <div class="hero-copy">
           <div class="section-label-mono">Test assets</div>
           <h1>Validated samples, manifests intact.</h1>
-          <p>Every image here passed embedded C2PA validation. Downloads serve the exact cached bytes we validated &mdash; unlike chat apps and social platforms, nothing here strips the manifest. Point your validator at them.</p>
+          <p>Every image here passed embedded C2PA validation, and downloads serve the exact bytes we validated. Chat apps and social platforms strip manifests on upload; nothing here does. Point your validator at them.</p>
         </div>
       </div>
     </section>
@@ -2433,7 +2434,7 @@ const RESOURCE_SECTIONS: Array<{ title: string; note: string; links: Array<{ nam
     title: "Sample assets",
     note: "Signed files for testing validators and pipelines.",
     links: [
-      { name: "Our test-asset library", url: "/assets", desc: "Crawled, validated samples with intact manifests, filterable by signer, continuously growing." },
+      { name: "Our test-asset library", url: "/assets", desc: "Crawled, validated samples with intact manifests, filterable by signer. Grows as the crawler runs." },
       { name: "contentauth/example-assets", url: "https://github.com/contentauth/example-assets", desc: "Community repository of signed reference assets." },
       { name: "Proofmode Baseline", url: "https://proofmode.org/baseline/", desc: "Guardian Project's public capture-sample repository." },
     ],
@@ -2468,7 +2469,7 @@ export function renderResources(): string {
   return `<!doctype html>
 <html lang="en">
 <head>
-  ${pageHead("Resources — mutual C2PA Search", "A working directory for people building on C2PA: verification tools, specs, SDKs, signing certificates, and sample assets.", "/resources")}
+  ${pageHead("Resources · mutual C2PA Search", "A working directory for people building on C2PA: verification tools, specs, SDKs, signing certificates, and sample assets.", "/resources")}
   <style>${SHARED_STYLES}
     .resource-card strong {
       font-size: 14.5px;
@@ -2497,7 +2498,7 @@ export function renderResources(): string {
         <div class="hero-copy">
           <div class="section-label-mono">Resources</div>
           <h1>A working directory for people building on C2PA.</h1>
-          <p>The best existing tool for each job, linked &mdash; plus the data only this hub measures. Know something that belongs here? <a href="https://mutual.solutions/" rel="noreferrer">Tell us</a>.</p>
+          <p>The best existing tool for each job, linked, plus the data only this hub measures. Know something that belongs here? <a href="https://mutual.solutions/" rel="noreferrer">Tell us</a>.</p>
         </div>
       </div>
     </section>
