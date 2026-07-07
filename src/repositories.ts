@@ -112,3 +112,23 @@ async function listGitHubRepositoryMediaUrls(repository: GitHubRepository, fetch
 function encodePathSegments(path: string): string {
   return path.split("/").map(encodeURIComponent).join("/");
 }
+
+export async function listRepositoryMediaUrls(repositoryUrl: string, fetcher: RepositoryFetcher = fetch): Promise<string[]> {
+  try {
+    const url = new URL(repositoryUrl);
+    const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+    if (url.hostname.replace(/^www\./, "") === "github.com" && parts.length >= 2) {
+      const [owner, repo] = parts;
+      return await listGitHubRepositoryMediaUrls(
+        { owner, repo, branch: "main", rawBaseUrl: `https://raw.githubusercontent.com/${owner}/${repo}/main` },
+        fetcher,
+      );
+    }
+    if (url.hostname.replace(/^www\./, "") === "gitlab.com" && parts.length >= 2) {
+      return await listGitLabRepositoryMediaUrls({ projectPath: parts.join("/"), branch: "main" }, fetcher);
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}

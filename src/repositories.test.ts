@@ -35,3 +35,21 @@ describe("listGitLabRepositoryMediaUrls", () => {
     ]);
   });
 });
+
+describe("listRepositoryMediaUrls", () => {
+  it("maps arbitrary github and gitlab repo urls onto the generic listers", async () => {
+    const requested: string[] = [];
+    const fetcher = async (url: string | URL) => {
+      requested.push(String(url));
+      return new Response(JSON.stringify({ tree: [] }), { headers: { "content-type": "application/json" } });
+    };
+    const { listRepositoryMediaUrls } = await import("./repositories");
+
+    await listRepositoryMediaUrls("https://github.com/someorg/somerepo", fetcher as never);
+    await listRepositoryMediaUrls("https://gitlab.com/group/subgroup/project", fetcher as never);
+    expect(requested[0]).toContain("api.github.com/repos/someorg/somerepo/git/trees/main");
+    expect(requested[1]).toContain("gitlab.com/api/v4/projects/group%2Fsubgroup%2Fproject/repository/tree");
+
+    expect(await listRepositoryMediaUrls("https://example.com/not-a-forge", fetcher as never)).toEqual([]);
+  });
+});

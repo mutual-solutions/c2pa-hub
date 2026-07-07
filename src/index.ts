@@ -6,7 +6,7 @@ import type { DiscoveryInput } from "./discovery";
 import { planDiscoveryBatch } from "./discovery";
 import { encodeCursor, parseAssetQuery, serializeCsv } from "./export";
 import type { AssetQuery } from "./export";
-import { listC2paPublicTestImages, listContentAuthConformanceToolCliAssets, listContentAuthExampleAssets, listProofmodeSampleMedia } from "./repositories";
+import { listC2paPublicTestImages, listContentAuthConformanceToolCliAssets, listContentAuthExampleAssets, listProofmodeSampleMedia, listRepositoryMediaUrls } from "./repositories";
 import { evaluateRobotsTxt, robotsUrlFor } from "./robots";
 import { validatePublicHttpUrl } from "./safety";
 import { normalizeValidation } from "./taxonomy";
@@ -1171,6 +1171,20 @@ async function processDiscoverySource(env: RuntimeEnv, crawlRunId: number, sourc
   });
   const body = await response.text();
   const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.startsWith("image/")) {
+    const asset = await upsertMediaAsset(env, {
+      url: safe.url.toString(),
+      sourceType: "direct_media",
+      sourceUrl: safe.url.toString(),
+      attribute: "content-type",
+      ordinal: 0,
+    });
+    await env.FETCH_QUEUE.send({ stage: "fetch", crawl_run_id: crawlRunId, media_asset_id: asset.id, media_url: asset.url });
+    await env.DB.prepare("update crawl_runs set media_candidates = media_candidates + 1, updated_at = ? where id = ?")
+      .bind(new Date().toISOString(), crawlRunId)
+      .run();
+    return;
+  }
   const linkedPages = source.sourceType === "sitemap" || source.sourceType === "rss" || /xml|rss|atom/i.test(contentType) ? extractXmlLinks(body, safe.url.toString()) : [];
   for (const linkedPage of linkedPages.slice(0, 50)) {
     await env.DISCOVERY_QUEUE.send({
@@ -1238,7 +1252,7 @@ async function discoverFromKnownRepository(env: RuntimeEnv, crawlRunId: number, 
       ? await listContentAuthConformanceToolCliAssets()
     : repositoryUrl.includes("github.com/c2pa-org/public-testfiles")
       ? await listC2paPublicTestImages()
-      : [];
+      : await listRepositoryMediaUrls(repositoryUrl);
 
   for (const candidate of candidatesFromUrls(urls, repositoryUrl, "known_repository").slice(0, KNOWN_REPOSITORY_CANDIDATE_LIMIT)) {
     const asset = await upsertMediaAsset(env, candidate);
