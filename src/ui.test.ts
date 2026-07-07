@@ -223,6 +223,9 @@ describe("renderTrust", () => {
     changes: [
       { date: "2026-06-25T18:16:55Z", message: "Automated Sync: Update TSA trust list (C2PA-TSA-TRUST-LIST.pem)", url: "https://github.com/x" },
     ],
+    productChanges: [
+      { date: "2026-07-06T01:00:00Z", message: "Add DigiCert Content Trust Manager", url: "https://github.com/y" },
+    ],
     products: [
       { cn: "Pixel Camera", applicant: "Google LLC", productType: "generatorProduct", assurance: 2, spec: "2.2", since: "2025-06-27", status: "conformant", observedTrusted: 5, observedUntrusted: 1, observedInvalid: 0 },
       { cn: "Ghost Cam", applicant: "Nobody Inc", productType: "generatorProduct", assurance: 1, spec: "2.3", since: "2026-01-01", status: "conformant", observedTrusted: 0, observedUntrusted: 0, observedInvalid: 0 },
@@ -239,10 +242,11 @@ describe("renderTrust", () => {
     expect(html).toContain("not seen");
     expect(html).toContain("/api/trust-changes");
     expect(html).toContain(">41<");
+    expect(html).toContain("Add DigiCert Content Trust Manager");
   });
 
   it("degrades gracefully when upstream sources are unreachable", () => {
-    const html = renderTrust({ sourceOk: false, trustCertCount: null, tsaCertCount: null, changes: [], products: [] });
+    const html = renderTrust({ sourceOk: false, trustCertCount: null, tsaCertCount: null, changes: [], productChanges: [], products: [] });
 
     expect(html).toContain("unreachable right now");
     expect(html).not.toContain("<table class=\"trust-table\"");

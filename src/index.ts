@@ -53,7 +53,7 @@ interface PlatformClaimMetadata {
 const USER_AGENT = "mutual-c2pa-hub/0.2 (+https://c2pa.mutual.solutions/methodology)";
 const BROWSER_IMAGE_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
 const PREFILTER_BYTES = 2_000_000;
-const KNOWN_REPOSITORY_CANDIDATE_LIMIT = 500;
+const KNOWN_REPOSITORY_CANDIDATE_LIMIT = 2000;
 const IMAGE_PROXY_MAX_BYTES = 12_000_000;
 const MUTUAL_SOFT_BINDING_CONTENT_ALG = "com.mutual.sha256.v1";
 const MUTUAL_SOFT_BINDING_REFERENCE_ALG = "com.mutual.reference-url.v1";
@@ -76,6 +76,7 @@ export default {
       if (request.method === "GET" && url.pathname === "/resources") return html(renderResources());
       if (request.method === "GET" && url.pathname === "/trust") return html(renderTrust(await loadTrustData(env)));
       if (request.method === "GET" && url.pathname === "/api/trust-changes") return trustChangesFeed(env);
+      if (request.method === "GET" && url.pathname === "/api/history") return historyFeed(env, ctx);
       if (request.method === "GET" && url.pathname === "/api/methodology") return json(methodology(env));
       if (request.method === "GET" && url.pathname === "/api/assets") return listAssets(url, env);
       if (request.method === "GET" && url.pathname.startsWith("/api/assets/")) return getAsset(url, env);
@@ -111,6 +112,7 @@ export default {
 
   async scheduled(_controller: ScheduledController, env: RuntimeEnv, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(scheduleBroadDiscovery(env, ctx));
+    ctx.waitUntil(ensureDailySnapshot(env).catch(() => undefined));
   },
 } satisfies ExportedHandler<RuntimeEnv, QueueMessage>;
 
@@ -183,6 +185,7 @@ const TRUST_LIST_URL = `https://raw.githubusercontent.com/${CONFORMANCE_REPO}/ma
 const TSA_LIST_URL = `https://raw.githubusercontent.com/${CONFORMANCE_REPO}/main/trust-list/C2PA-TSA-TRUST-LIST.pem`;
 const PRODUCTS_URL = `https://raw.githubusercontent.com/${CONFORMANCE_REPO}/main/conforming-products/conforming-products-list.json`;
 const TRUST_COMMITS_URL = `https://github.com/${CONFORMANCE_REPO}/commits/main/trust-list.atom`;
+const PRODUCT_COMMITS_URL = `https://github.com/${CONFORMANCE_REPO}/commits/main/conforming-products.atom`;
 
 async function cachedUpstreamText(url: string, ttlSeconds: number): Promise<string | null> {
   const cache = typeof caches !== "undefined" ? caches.default : null;
@@ -212,11 +215,12 @@ function countCertificates(pem: string | null): number | null {
 }
 
 async function loadTrustData(env: RuntimeEnv): Promise<TrustData> {
-  const [trustPem, tsaPem, productsRaw, commitsRaw, signerRows] = await Promise.all([
+  const [trustPem, tsaPem, productsRaw, commitsRaw, productCommitsRaw, signerRows] = await Promise.all([
     cachedUpstreamText(TRUST_LIST_URL, 3600),
     cachedUpstreamText(TSA_LIST_URL, 3600),
     cachedUpstreamText(PRODUCTS_URL, 3600),
     cachedUpstreamText(TRUST_COMMITS_URL, 3600),
+    cachedUpstreamText(PRODUCT_COMMITS_URL, 3600),
     env.DB.prepare("select signer, classification, count(*) as n from media_assets where signer is not null group by signer, classification").all(),
   ]);
 
@@ -269,21 +273,90 @@ async function loadTrustData(env: RuntimeEnv): Promise<TrustData> {
     products = [];
   }
 
-  const changes: TrustData["changes"] = [];
-  for (const entry of (commitsRaw ?? "").split("<entry>").slice(1)) {
-    const title = entry.match(/<title>([^<]*)<\/title>/)?.[1] ?? "";
-    const updated = entry.match(/<updated>([^<]*)<\/updated>/)?.[1] ?? "";
-    const link = entry.match(/href="([^"]*)"/)?.[1] ?? "";
-    if (updated) changes.push({ date: updated, message: title.trim(), url: link });
-  }
+  const changes = parseAtomChanges(commitsRaw);
+  const productChanges = parseAtomChanges(productCommitsRaw);
 
   return {
     sourceOk: Boolean(productsRaw && commitsRaw),
     trustCertCount: countCertificates(trustPem),
     tsaCertCount: countCertificates(tsaPem),
     changes,
+    productChanges,
     products,
   };
+}
+
+function parseAtomChanges(xml: string | null): TrustData["changes"] {
+  const changes: TrustData["changes"] = [];
+  for (const entry of (xml ?? "").split("<entry>").slice(1)) {
+    const title = entry.match(/<title>([^<]*)<\/title>/)?.[1] ?? "";
+    const updated = entry.match(/<updated>([^<]*)<\/updated>/)?.[1] ?? "";
+    const link = entry.match(/href="([^"]*)"/)?.[1] ?? "";
+    if (updated) changes.push({ date: updated, message: title.trim(), url: link });
+  }
+  return changes;
+}
+
+async function ensureDailySnapshot(env: RuntimeEnv): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+  const existing = await env.DB.prepare("select id from stats_snapshots where snapshot_date = ?").bind(today).first();
+  if (existing) return;
+
+  const [classifications, meta, trustPem, tsaPem, productsRaw] = await Promise.all([
+    env.DB.prepare("select classification, count(*) as n from media_assets group by classification").all(),
+    env.DB.prepare("select count(*) as total, count(distinct domain) as domains, min(created_at) as first_seen, max(created_at) as last_seen from media_assets").first(),
+    cachedUpstreamText(TRUST_LIST_URL, 3600),
+    cachedUpstreamText(TSA_LIST_URL, 3600),
+    cachedUpstreamText(PRODUCTS_URL, 3600),
+  ]);
+
+  const counts: Record<string, number> = {};
+  for (const row of (classifications.results ?? []) as Array<Record<string, unknown>>) {
+    counts[String(row.classification)] = Number(row.n) || 0;
+  }
+  let productCount: number | null = null;
+  try {
+    const parsed = JSON.parse(productsRaw ?? "null");
+    if (Array.isArray(parsed)) productCount = parsed.length;
+  } catch {
+    productCount = null;
+  }
+  const metaRow = (meta ?? {}) as Record<string, unknown>;
+
+  await env.DB.prepare(
+    `insert or ignore into stats_snapshots
+     (snapshot_date, total_assets, domains, classification_counts, trust_cert_count, tsa_cert_count, conforming_product_count, methodology_version)
+     values (?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      today,
+      Number(metaRow.total) || 0,
+      Number(metaRow.domains) || 0,
+      JSON.stringify(counts),
+      countCertificates(trustPem),
+      countCertificates(tsaPem),
+      productCount,
+      env.METHODOLOGY_VERSION,
+    )
+    .run();
+}
+
+async function historyFeed(env: RuntimeEnv, ctx: ExecutionContext): Promise<Response> {
+  ctx.waitUntil(ensureDailySnapshot(env).catch(() => undefined));
+  const rows = await env.DB.prepare(
+    "select snapshot_date, total_assets, domains, classification_counts, trust_cert_count, tsa_cert_count, conforming_product_count, methodology_version from stats_snapshots order by snapshot_date desc limit 400",
+  ).all();
+  return json({
+    snapshots: ((rows.results ?? []) as Array<Record<string, unknown>>).map((row) => {
+      let counts: unknown = {};
+      try {
+        counts = JSON.parse(String(row.classification_counts ?? "{}"));
+      } catch {
+        counts = {};
+      }
+      return { ...row, classification_counts: counts };
+    }),
+  });
 }
 
 async function trustChangesFeed(env: RuntimeEnv): Promise<Response> {
@@ -295,6 +368,7 @@ async function trustChangesFeed(env: RuntimeEnv): Promise<Response> {
     tsa_cert_count: data.tsaCertCount,
     conforming_product_count: data.products.length,
     changes: data.changes,
+    product_changes: data.productChanges,
   });
 }
 
@@ -1135,7 +1209,7 @@ async function discoverFromSearch(env: RuntimeEnv, crawlRunId: number, query: st
   if (!env.BRAVE_SEARCH_API_KEY) return;
   const searchUrl = new URL("https://api.search.brave.com/res/v1/images/search");
   searchUrl.searchParams.set("q", query);
-  searchUrl.searchParams.set("count", "20");
+  searchUrl.searchParams.set("count", "50");
   const response = await fetch(searchUrl, {
     headers: {
       accept: "application/json",
@@ -1190,7 +1264,7 @@ async function discoverFromCommonCrawl(env: RuntimeEnv, crawlRunId: number, quer
   indexUrl.searchParams.set("output", "json");
   indexUrl.searchParams.set("filter", "status:200");
   indexUrl.searchParams.set("fl", "url,mime,status");
-  indexUrl.searchParams.set("limit", "50");
+  indexUrl.searchParams.set("limit", "250");
   const response = await fetch(indexUrl, { headers: { "user-agent": USER_AGENT, accept: "application/json" } });
   if (!response.ok) return;
   const lines = (await response.text()).split(/\r?\n/).filter(Boolean);
@@ -1434,12 +1508,24 @@ async function scheduleBroadDiscovery(env: RuntimeEnv, ctx: ExecutionContext): P
   const sources: DiscoveryInput[] = [
     { type: "search_api", value: "Content Credentials image", provider: "brave" },
     { type: "search_api", value: "Google Pixel Content Credentials photo", provider: "brave" },
+    { type: "search_api", value: "C2PA signed photo sample", provider: "brave" },
+    { type: "search_api", value: "content credentials verified photograph", provider: "brave" },
+    { type: "search_api", value: "Leica M11-P content credentials photo", provider: "brave" },
+    { type: "search_api", value: "Truepic verified image", provider: "brave" },
+    { type: "search_api", value: "Proofmode verified photo", provider: "brave" },
+    { type: "search_api", value: "Samsung Galaxy content credentials photo", provider: "brave" },
     { type: "known_repository", value: "https://gitlab.com/guardianproject/proofmode/proofmode-c2pa-sample-media" },
+    { type: "known_repository", value: "https://gitlab.com/guardianproject/proofmode/proofmode-c2pa-conformance" },
     { type: "known_repository", value: "https://github.com/contentauth/example-assets" },
     { type: "known_repository", value: "https://github.com/contentauth/c2pa-conformance-tool-cli" },
     { type: "known_repository", value: "https://github.com/c2pa-org/public-testfiles" },
     { type: "manual_seed", value: "https://github.com/contentauth/c2pa-rs/issues/1555", provider: "github_issue_pixel10" },
     { type: "common_crawl", value: "url-index:content-credentials" },
+    { type: "common_crawl", value: "url-index:c2pa" },
+    { type: "common_crawl", value: "url-index:contentauthenticity" },
+    { type: "manual_seed", value: "https://proofmode.org/baseline/" },
+    { type: "manual_seed", value: "https://contentauth.github.io/example-assets/" },
+    { type: "manual_seed", value: "https://www.linkedin.com/feed/update/urn:li:activity:7457195260054540288/", provider: "linkedin_public_post" },
     { type: "sitemap", value: "https://contentauthenticity.org/sitemap.xml" },
     { type: "rss", value: "https://contentauthenticity.org/feed.xml" },
   ];

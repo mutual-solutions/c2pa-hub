@@ -115,6 +115,7 @@ class FakeD1 {
   public softBindingIndex: SoftBindingIndexRow[] = [];
   public leases: Array<Record<string, unknown>> = [];
   public securityEvents: Array<Record<string, unknown>> = [];
+  public snapshots: Array<Record<string, unknown>> = [];
   public nonces = new Set<string>();
 
   prepare(sql: string): FakePreparedStatement {
@@ -122,6 +123,9 @@ class FakeD1 {
   }
 
   all(sql: string, values: unknown[]): unknown[] {
+    if (sql.includes("from stats_snapshots")) {
+      return [...this.snapshots].sort((a, b) => String(b.snapshot_date).localeCompare(String(a.snapshot_date)));
+    }
     if (sql.includes("group by signer, classification")) {
       const groups = new Map<string, { signer: string; classification: string; n: number }>();
       for (const asset of this.assets) {
@@ -181,6 +185,9 @@ class FakeD1 {
   }
 
   first(sql: string, values: unknown[]): unknown | null {
+    if (sql.includes("from stats_snapshots where snapshot_date")) {
+      return this.snapshots.find((row) => row.snapshot_date === values[0]) ?? null;
+    }
     if (sql.includes("select actions_json, ingredients_count from validation_attempts")) {
       const attempt = this.validationJobs.find((job) => job.media_asset_id === values[0]);
       return attempt ? { actions_json: attempt.actions_json ?? "[]", ingredients_count: attempt.ingredients_count ?? 0 } : null;
@@ -270,6 +277,19 @@ class FakeD1 {
   }
 
   run(sql: string, values: unknown[]): number {
+    if (sql.includes("insert or ignore into stats_snapshots")) {
+      this.snapshots.push({
+        snapshot_date: values[0],
+        total_assets: values[1],
+        domains: values[2],
+        classification_counts: values[3],
+        trust_cert_count: values[4],
+        tsa_cert_count: values[5],
+        conforming_product_count: values[6],
+        methodology_version: values[7],
+      });
+      return 1;
+    }
     if (sql.includes("update validation_attempts") && sql.includes("lease_owner")) {
       this.leases.push({ lease_owner: values[0], lease_expires_at: values[1], id: values[2] });
       return 1;
@@ -963,12 +983,12 @@ describe("Worker v2 API", () => {
 
     const messages = (testEnv.DISCOVERY_QUEUE as unknown as FakeQueue).messages as Array<{ source?: { sourceType?: string } }>;
     expect(waited.length).toBeGreaterThanOrEqual(2);
-    expect(messages).toHaveLength(10);
+    expect(messages).toHaveLength(22);
     expect(new Set(messages.map((message) => message.source?.sourceType))).toEqual(
       new Set(["search_api", "known_repository", "common_crawl", "sitemap", "rss", "manual_seed"]),
     );
     expect(db.crawlRuns).toHaveLength(1);
-    expect(db.discoverySources).toHaveLength(10);
+    expect(db.discoverySources).toHaveLength(22);
   });
 
   it("returns bounded JSON exports with methodology metadata", async () => {
@@ -1199,6 +1219,54 @@ describe("trust page", () => {
       expect(data.trust_cert_count).toBe(2);
       expect(data.tsa_cert_count).toBe(1);
       expect(data.changes.length).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("history snapshots", () => {
+  it("writes a daily snapshot lazily and serves it from /api/history", async () => {
+    const stub = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("C2PA-TRUST-LIST.pem")) return new Response("BEGIN CERTIFICATE\n");
+      if (url.includes("C2PA-TSA-TRUST-LIST.pem")) return new Response("BEGIN CERTIFICATE\n");
+      if (url.includes("conforming-products-list.json")) return new Response("[{},{}]");
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", stub);
+    try {
+      const db = new FakeD1();
+      db.assets = [
+        {
+          id: 1,
+          url: "https://example.com/a.jpg",
+          normalized_url: "https://example.com/a.jpg",
+          domain: "example.com",
+          source_type: "manual_seed",
+          source_url: "https://example.com/a.jpg",
+          classification: "trusted_camera_capture",
+          public_category: "real",
+          validation_status: "valid",
+          signer: "Pixel Camera",
+          claim_generator: "Pixel Camera",
+          content_type: "image/jpeg",
+          latest_validated_at: "2026-06-27T00:01:00.000Z",
+          created_at: "2026-06-27T00:00:00.000Z",
+        },
+      ];
+
+      const first = await worker.fetch(new Request("https://c2pa.mutual.solutions/api/history"), env(db), testCtx);
+      expect(first.status).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(db.snapshots.length).toBe(1);
+      expect(db.snapshots[0].total_assets).toBe(1);
+      expect(db.snapshots[0].conforming_product_count).toBe(2);
+
+      const second = await worker.fetch(new Request("https://c2pa.mutual.solutions/api/history"), env(db), testCtx);
+      const data = (await second.json()) as { snapshots: Array<{ snapshot_date: string; classification_counts: Record<string, number> }> };
+      expect(data.snapshots.length).toBe(1);
+      expect(data.snapshots[0].classification_counts.trusted_camera_capture).toBe(1);
     } finally {
       vi.unstubAllGlobals();
     }

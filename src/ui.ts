@@ -2555,6 +2555,7 @@ export interface TrustData {
   trustCertCount: number | null;
   tsaCertCount: number | null;
   changes: Array<{ date: string; message: string; url: string }>;
+  productChanges: Array<{ date: string; message: string; url: string }>;
   products: TrustProduct[];
 }
 
@@ -2664,6 +2665,15 @@ export function renderTrust(data: TrustData): string {
       <p class="chart-note">Every change to the official C2PA trust list and TSA trust list, from the <a href="https://github.com/c2pa-org/conformance-public/commits/main/trust-list" rel="noreferrer" target="_blank">c2pa-org/conformance-public</a> history. Certificate additions and revocations show up here. Machine-readable feed: <a href="/api/trust-changes">/api/trust-changes</a>.</p>
       <ul class="change-list">
         ${changeItems}
+      </ul>
+
+      <h2>Recent conforming-products changes</h2>
+      <p class="chart-note">Additions and updates to the official conforming-products list itself. New products land here before anyone ships images.</p>
+      <ul class="change-list">
+        ${data.productChanges
+          .slice(0, 8)
+          .map((change) => `<li><span class="change-date">${esc(change.date.slice(0, 10))}</span><span>${esc(change.message.split("\n")[0])}</span></li>`)
+          .join("\n        ")}
       </ul>
 
       <h2>Conforming products, observed in the wild</h2>
