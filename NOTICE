@@ -1,0 +1,33 @@
+mutual C2PA hub (c2pa.mutual.solutions)
+Copyright 2026 mutual Solutions, Inc.
+
+Licensed under the Apache License, Version 2.0. See the LICENSE file.
+
+Redistributed upstream data
+---------------------------
+
+This service ingests and redistributes trust and conformance data
+published by the C2PA in the c2pa-org/conformance-public repository
+(https://github.com/c2pa-org/conformance-public), licensed under the
+Creative Commons Attribution 4.0 International license (CC BY 4.0),
+per that repository's LICENSE file (verified 2026-07-23).
+
+The following data is fetched at runtime (cached for up to one hour
+via the Cache API; nothing is vendored into this repository):
+
+- trust-list/C2PA-TRUST-LIST.pem and
+  trust-list/C2PA-TSA-TRUST-LIST.pem (raw.githubusercontent.com),
+  used by src/index.ts for the /trust page, by
+  scripts/validate-jobs.mjs as the validator trust anchors, and by
+  scripts/soft-binding.mjs for TSA anchors.
+- conforming-products/conforming-products-list.json
+  (raw.githubusercontent.com), used by src/index.ts for the /trust
+  conformance cross-reference.
+- The GitHub commits Atom feeds for both paths (github.com), used by
+  src/index.ts to render the change history on /trust and
+  /api/trust-changes.
+
+C2PA trust-list and conforming-products contents shown on /trust and
+served through /api/trust-changes originate from that repository and
+are credited to the Coalition for Content Provenance and Authenticity
+(C2PA).

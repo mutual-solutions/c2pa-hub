@@ -163,7 +163,7 @@ npm run deploy      # deploy to Cloudflare Workers
 
 ```bash
 npx wrangler deploy --dry-run
-gh workflow run "C2PA Validator" --repo mutantQ/mutual-c2pa-hub --ref master
+gh workflow run "C2PA Validator" --repo mutual-solutions/c2pa-hub --ref main
 ```
 
 The scheduled Worker queues broad discovery every six hours (cron `17 */6 * * *`). The validator workflow runs every 15 minutes.
